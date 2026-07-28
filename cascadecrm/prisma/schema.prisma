@@ -1,0 +1,231 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  REP
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  DISQUALIFIED
+  CONVERTED
+}
+
+enum LeadSource {
+  WEB
+  REFERRAL
+  OUTBOUND
+  EVENT
+  PARTNER
+  OTHER
+}
+
+enum OpportunityStage {
+  QUALIFICATION
+  NEEDS_ANALYSIS
+  PROPOSAL
+  NEGOTIATION
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+enum ActivityType {
+  NOTE
+  CALL
+  EMAIL
+  MEETING
+  TASK
+  STAGE_CHANGE
+  CONVERSION
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(REP)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ownedAccounts      Account[]     @relation("AccountOwner")
+  ownedContacts      Contact[]     @relation("ContactOwner")
+  ownedLeads         Lead[]        @relation("LeadOwner")
+  ownedOpportunities Opportunity[] @relation("OpportunityOwner")
+  tasks              Task[]        @relation("TaskAssignee")
+  activities         Activity[]    @relation("ActivityAuthor")
+}
+
+model Account {
+  id             String   @id @default(cuid())
+  name           String
+  website        String?
+  industry       String?
+  phone          String?
+  billingAddress String?
+  description    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  ownerId String
+  owner   User   @relation("AccountOwner", fields: [ownerId], references: [id])
+
+  contacts      Contact[]
+  opportunities Opportunity[]
+  tasks         Task[]
+  activities    Activity[]
+
+  @@index([name])
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String
+  email     String?
+  phone     String?
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ownerId String
+  owner   User   @relation("ContactOwner", fields: [ownerId], references: [id])
+
+  accountId String?
+  account   Account? @relation(fields: [accountId], references: [id])
+
+  opportunities     Opportunity[]
+  tasks             Task[]
+  activities        Activity[]
+  convertedFromLead Lead?
+
+  @@index([lastName, firstName])
+  @@index([accountId])
+}
+
+model Lead {
+  id        String     @id @default(cuid())
+  firstName String
+  lastName  String
+  company   String?
+  email     String?
+  phone     String?
+  status    LeadStatus @default(NEW)
+  source    LeadSource @default(WEB)
+  notes     String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  ownerId String
+  owner   User   @relation("LeadOwner", fields: [ownerId], references: [id])
+
+  convertedContactId String?  @unique
+  convertedContact   Contact? @relation(fields: [convertedContactId], references: [id])
+
+  convertedAccountId     String?
+  convertedOpportunityId String?
+
+  tasks      Task[]
+  activities Activity[]
+
+  @@index([status])
+}
+
+model Opportunity {
+  id          String           @id @default(cuid())
+  name        String
+  amount      Decimal          @default(0) @db.Decimal(14, 2)
+  stage       OpportunityStage @default(QUALIFICATION)
+  probability Int              @default(10)
+  closeDate   DateTime?
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  ownerId String
+  owner   User   @relation("OpportunityOwner", fields: [ownerId], references: [id])
+
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id])
+
+  tasks      Task[]
+  activities Activity[]
+
+  @@index([stage])
+  @@index([accountId])
+}
+
+model Task {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  dueDate     DateTime?
+  status      TaskStatus   @default(OPEN)
+  priority    TaskPriority @default(NORMAL)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  assigneeId String
+  assignee   User   @relation("TaskAssignee", fields: [assigneeId], references: [id])
+
+  accountId     String?
+  account       Account?     @relation(fields: [accountId], references: [id])
+  contactId     String?
+  contact       Contact?     @relation(fields: [contactId], references: [id])
+  leadId        String?
+  lead          Lead?        @relation(fields: [leadId], references: [id])
+  opportunityId String?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id])
+
+  @@index([status, dueDate])
+}
+
+model Activity {
+  id        String       @id @default(cuid())
+  type      ActivityType
+  body      String
+  createdAt DateTime     @default(now())
+
+  authorId String
+  author   User   @relation("ActivityAuthor", fields: [authorId], references: [id])
+
+  accountId     String?
+  account       Account?     @relation(fields: [accountId], references: [id])
+  contactId     String?
+  contact       Contact?     @relation(fields: [contactId], references: [id])
+  leadId        String?
+  lead          Lead?        @relation(fields: [leadId], references: [id])
+  opportunityId String?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id])
+
+  @@index([createdAt])
+}
